@@ -68,15 +68,17 @@ class VehicleRegistrationController:
             # select(ParkingSpot).where(ParkingSpot.status == "available")
             # ).first()    
             
-            query_spot = text("SELECT id,slot,status FROM parkingspot WHERE status = 'available' LIMIT 1")
-            available_spot = db.execute(query_spot).fetchone()
+            query_spot = text("SELECT id, status FROM parkingspot WHERE id = :parking_spot_id")
+            requested_spot = db.execute(query_spot, {"parking_spot_id": vehicle_registration.parking_spot_id}).fetchone()
 
-            if not available_spot:
-                VehicleRegistrationController.waiting_queue.append(vehicle_registration)
-                raise HTTPException(status_code=400, detail="All slots are full. Your vehicle are added to the queue.")
+            if not requested_spot:
+                raise HTTPException(status_code=404, detail="Parking spot does not exist.")
             
+            
+            if requested_spot.status != "available":
+                raise HTTPException(status_code=400, detail=f"Parking spot {vehicle_registration.parking_spot_id} is not available.")
             update_spot_status = text("UPDATE parkingspot SET status ='occupied' WHERE id = :spot_id")
-            db.execute(update_spot_status,{"spot_id":available_spot.id})
+            db.execute(update_spot_status,{"spot_id":requested_spot.id})
             # available_spot.status="occupied"
             # vehicle_registration.parking_spot_id = available_spot.id
 
@@ -88,7 +90,7 @@ class VehicleRegistrationController:
         
             vehicle_id = db.execute(query_insert_vehicle, {
                 "vehicle_number": vehicle_registration.vehicle_number,
-                "parking_spot_id": available_spot.id,
+                "parking_spot_id": requested_spot.id,
                 "entry_time": vehicle_registration.entry_time
             }).fetchone()[0]    
 
@@ -185,18 +187,20 @@ class VehicleRegistrationController:
             if exit_time_aware and entry_time_aware:
                 duration = exit_time_aware - entry_time_aware
                 hours_parked = math.ceil(duration.total_seconds() // 3600)
-                parking_fee = int(hours_parked * rate_per_hour)
-            else:
-                parking_fee = 50
-
-            entry_time_pst = entry_time_aware.astimezone(PST) if vehicle.entry_time else None
-            exit_time_pst = exit_time_aware.astimezone(PST) if vehicle.exit_time else None
+                parking_fee = max(int(hours_parked * rate_per_hour),50)
+                print("Parking fee----------->",parking_fee)
+            
+            entry_time_pst = entry_time_aware.astimezone(tz=PST) if vehicle.entry_time else None
+            exit_time_pst = exit_time_aware.astimezone(tz=PST) if vehicle.exit_time else None
             formatted_entry_time = entry_time_pst.strftime("%I:%M %p") if entry_time_pst else None
             formatted_exit_time = exit_time_pst.strftime("%I:%M %p") if exit_time_pst else None
 
 
             # parking_spot.status = "available"
-            db.add(parking_spot)
+
+            update_spot_status = text("UPDATE parkingspot SET status = 'available' WHERE id = :spot_id")
+            db.execute(update_spot_status, {"spot_id": parking_spot.id})
+            # db.add(parking_spot)
             # db.delete(vehicle)
             db.commit()
 
@@ -225,54 +229,4 @@ class VehicleRegistrationController:
             raise HTTPException(status_code=500,detail=f"An error occured {e}")
 
     
-    @staticmethod
-    def get_all_vehicle_records(db: Session):
-        try:
-            statement = select(VehicleRegistration, ParkingSpot).join(ParkingSpot, VehicleRegistration.parking_spot_id == ParkingSpot.id)
-            results = db.exec(statement).all()
-
-            vehicle_records = []
-
-            for vehicle, spot in results:
-                entry_time = vehicle.entry_time
-                exit_time = vehicle.exit_time
-
-                if vehicle.entry_time and exit_time:
-                    duration = exit_time - vehicle.entry_time
-                    hours_parked = math.ceil(duration.total_seconds() // 3600)
-                    parking_fee = int(hours_parked * 50)
-                else:
-                    parking_fee = 50
-
-                formatted_entry_time = entry_time.strftime("%I:%M %p") if entry_time else None
-                formatted_exit_time = exit_time.strftime("%I:%M %p") if exit_time else None
-
-                vehicle_record = {
-                    "id": vehicle.id,
-                    "vehicle_number": vehicle.vehicle_number,
-                    "entry_time": formatted_entry_time,
-                    "exit_time": formatted_exit_time,
-                    "parking_fee": parking_fee,
-                    "status": "exited" if exit_time else "parked",
-                    "parking_spot": {
-                        "id": spot.id,
-                        "slot": spot.slot,
-                        "status": spot.status
-                    }
-                }
-                vehicle_records.append(vehicle_record)
-
-            for vehicle in VehicleRegistrationController.waiting_queue:
-                vehicle_record = {
-                    "vehicle_number": vehicle.vehicle_number,
-                    "status": "in queue",
-                    "entry_time": None,
-                    "exit_time": None,
-                    "parking_spot": None,
-                    "parking_fee": None
-                }
-                vehicle_records.append(vehicle_record)
-
-            return vehicle_records  
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"An error occurred: {e}")
+   
