@@ -10,17 +10,27 @@ from zoneinfo import ZoneInfo
 PST = ZoneInfo('Asia/Karachi')
 
 def calculate_parking_fee_and_time(entry_time, exit_time=None, rate_per_hour=50):
-    entry_time_aware = entry_time if entry_time.tzinfo else entry_time.replace(tzinfo=timezone.utc)
+
+    if entry_time.tzinfo is None:
+        entry_time_aware = entry_time.replace(tzinfo=timezone.utc)
+    else:
+        entry_time_aware = entry_time.astimezone(timezone.utc)
+
     exit_time_aware = exit_time if exit_time else datetime.now(timezone.utc)
+
+    if exit_time_aware.tzinfo is None:
+        exit_time_aware = exit_time_aware.replace(tzinfo=timezone.utc)
+    else:
+        exit_time_aware = exit_time_aware.astimezone(timezone.utc)
 
     duration = exit_time_aware - entry_time_aware
     hours_parked = math.ceil(duration.total_seconds() / 3600)
-    parking_fee =  int(hours_parked * 50) 
+    parking_fee =  int(hours_parked * rate_per_hour) 
 
-    entry_time_pst = entry_time_aware.astimezone(tz=PST) if entry_time else None
-    exit_time_pst = exit_time_aware.astimezone(tz=PST) if exit_time else None
-    formatted_entry_time = entry_time_pst.strftime("%I:%M %p") if entry_time_pst else None
-    formatted_exit_time = exit_time_pst.strftime("%I:%M %p") if exit_time_pst else None
+    entry_time_pst = entry_time_aware.astimezone(tz=PST)
+    exit_time_pst = exit_time_aware.astimezone(tz=PST) 
+    formatted_entry_time = entry_time_pst.strftime("%I:%M %p") 
+    formatted_exit_time = exit_time_pst.strftime("%I:%M %p") if exit_time else None
 
     return formatted_entry_time, formatted_exit_time, parking_fee
 
@@ -107,7 +117,7 @@ class VehicleRegistrationController:
             raise HTTPException(status_code=500,detail=f"An error occured {e}")
 
     @staticmethod
-    def read_vehicle_registrations(db:Session,calculate_fee_and_time=Depends(calculate_parking_fee_and_time)):
+    def read_vehicle_registrations(db:Session):
         try:
             query = text("""
                 SELECT 
@@ -124,7 +134,7 @@ class VehicleRegistrationController:
 
             vehicle_registrations = []
             for row in results:
-                formatted_entry_time, formatted_exit_time, parking_fee = calculate_fee_and_time(row.entry_time, row.exit_time)
+                formatted_entry_time, formatted_exit_time, parking_fee = calculate_parking_fee_and_time(row.entry_time, row.exit_time)
 
                 vehicle_registration = {
                     "id": row.vehicle_id,
@@ -146,7 +156,7 @@ class VehicleRegistrationController:
 
          
     @staticmethod
-    def post_vehicle_exit(vehicle_number: str, db:Session,calculate_fee_and_time=Depends(calculate_parking_fee_and_time)) -> VehicleRegistrationResponse:
+    def post_vehicle_exit(vehicle_number: str, db:Session, rate_per_hour: int = 50) -> VehicleRegistrationResponse:
         try:
             query_vehicle = text("SELECT * FROM vehicleregistration WHERE vehicle_number = :vehicle_number")
             vehicle = db.execute(query_vehicle, {"vehicle_number": vehicle_number}).fetchone()
@@ -163,15 +173,18 @@ class VehicleRegistrationController:
             if parking_spot.status != "occupied":
                 raise HTTPException(status_code=404, detail="Parking spot is not occupied or the status is incorrect.")
 
-            formatted_entry_time, formatted_exit_time, parking_fee = calculate_fee_and_time(vehicle.entry_time)    
+            formatted_entry_time, formatted_exit_time, parking_fee =  calculate_parking_fee_and_time(vehicle.entry_time)    
+
+            exit_time_aware = datetime.now(timezone.utc)
+            update_vehicle_exit_time = text("UPDATE vehicleregistration SET exit_time = :exit_time WHERE id = :vehicle_id")
+            db.execute(update_vehicle_exit_time, {"exit_time": exit_time_aware, "vehicle_id": vehicle.id})
 
             update_spot_status = text("UPDATE parkingspot SET status = 'available' WHERE id = :spot_id")
             db.execute(update_spot_status, {"spot_id": parking_spot.id})
 
-            update_vehicle_exit_time = text("UPDATE vehicleregistration SET exit_time = :exit_time WHERE id = :vehicle_id")
-            db.execute(update_vehicle_exit_time, {"exit_time": exit_time_aware, "vehicle_id": vehicle.id})
-
             db.commit()
+
+            formatted_entry_time, formatted_exit_time, parking_fee =  calculate_parking_fee_and_time(vehicle.entry_time,exit_time_aware)    
 
             vehicle_response = VehicleRegistrationResponse(
                 id=vehicle.id,
