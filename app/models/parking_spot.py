@@ -29,6 +29,8 @@ class VehicleRegistrationResponse(SQLModel):
     entry_time: Optional[str]
     parking_spot: Optional[ParkingSpotResponse]
 
+class VehicleExitRequest(SQLModel):
+    vehicle_number: str
 class GenericResponse(SQLModel):
     message: Optional[str] = None
     data: Optional[Any] = None    
