@@ -38,7 +38,3 @@ def post_vehicle_exit(request: VehicleExitRequest, db: Session = Depends(get_db)
     vehicle_exit_response = VehicleRegistrationController.post_vehicle_exit(request.vehicle_number, db, rate_per_hour)
     return vehicle_exit_response
 
-@router.get("/all-vehicle-records", response_model=GenericResponse)
-def get_all_vehicle_records(db:Session = Depends(get_db)):
-    records = VehicleRegistrationController.get_all_vehicle_records(db)
-    return GenericResponse(message="The total vehicle record is",data=records)
