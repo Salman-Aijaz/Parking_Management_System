@@ -33,7 +33,7 @@ def create_vehicle_registration(vehicle_registration: VehicleRegistration,db:Ses
 def get_vehicle_registrations(db:Session = Depends(get_db)):
     return VehicleRegistrationController.read_vehicle_registrations(db)
 
-@router.post("/vehicle-exit", response_model=Dict[str, Any])
+@router.post("/vehicle-exit", response_model=GenericResponse)
 def post_vehicle_exit(request: VehicleExitRequest, db: Session = Depends(get_db), rate_per_hour: int = 50):
     vehicle_exit_response = VehicleRegistrationController.post_vehicle_exit(request.vehicle_number, db, rate_per_hour)
     return vehicle_exit_response

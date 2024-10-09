@@ -2,7 +2,7 @@ import math
 from datetime import datetime, timezone
 from sqlmodel import Session
 from fastapi import HTTPException,Depends
-from app.models.parking_spot import ParkingSpot,VehicleRegistration,ParkingSpotResponse,VehicleRegistrationResponse
+from app.models.parking_spot import ParkingSpot,VehicleRegistration,ParkingSpotResponse,VehicleRegistrationResponse,GenericResponse
 from sqlalchemy import text
 from zoneinfo import ZoneInfo
 from app.database import redis_client
@@ -209,10 +209,10 @@ class VehicleRegistrationController:
             )
 
 
-            return {
-            "message": f"Vehicle registration in slot {parking_spot.slot} has been deleted.",
-            "vehicle_details": vehicle_response
-            }
+            return GenericResponse(
+            message= f"Vehicle registration in slot {parking_spot.slot} has been deleted.",
+            data= vehicle_response
+            )
         
         except HTTPException as http_exc:
             raise http_exc
