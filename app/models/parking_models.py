@@ -1,5 +1,5 @@
 from sqlmodel import SQLModel, Field, Relationship
-from typing import Any, Optional,List
+from typing import List, Optional
 from datetime import datetime, timezone
 
 class ParkingSpot(SQLModel, table=True):
@@ -14,23 +14,4 @@ class VehicleRegistration(SQLModel, table=True):
     entry_time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     exit_time: Optional[datetime] = None 
     parking_spot_id: Optional[int] = Field(foreign_key="parkingspot.id")  
-    parking_spot: Optional[ParkingSpot] = Relationship(back_populates="vehicles") 
-
-class ParkingSpotResponse(SQLModel):
-    id: Optional[int]
-    slot: int
-    status: str
-
-class VehicleRegistrationResponse(SQLModel):
-    id: Optional[int]
-    vehicle_number: str
-    exit_time: Optional[str]  
-    parking_fee: Optional[int]  
-    entry_time: Optional[str]
-    parking_spot: Optional[ParkingSpotResponse]
-
-class VehicleExitRequest(SQLModel):
-    vehicle_number: str
-class GenericResponse(SQLModel):
-    message: Optional[str] = None
-    data: Optional[Any] = None    
+    parking_spot: Optional[ParkingSpot] = Relationship(back_populates="vehicles")
