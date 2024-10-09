@@ -3,11 +3,12 @@ from datetime import datetime, timezone
 from sqlmodel import Session
 from fastapi import HTTPException,Depends
 from app.models.parking_spot import ParkingSpot,VehicleRegistration,ParkingSpotResponse,VehicleRegistrationResponse
-from collections import deque
 from sqlalchemy import text
 from zoneinfo import ZoneInfo
+from app.database import redis_client
 
-PST = ZoneInfo('Asia/Karachi')
+PST = ZoneInfo.timezone('Asia/Karachi')
+
 
 def calculate_parking_fee_and_time(entry_time, exit_time=None, rate_per_hour=50):
 
@@ -72,9 +73,7 @@ class ParkingController:
             raise HTTPException(status_code=500,detail=f"An error occured in read_parking_spots:{e} ")
     
     
-class VehicleRegistrationController:
-    waiting_queue=deque()
-    
+class VehicleRegistrationController:    
     @staticmethod
     def create_vehicle_registration(vehicle_registration: VehicleRegistration,db:Session):
         try:
@@ -90,7 +89,9 @@ class VehicleRegistrationController:
                 raise HTTPException(status_code=404, detail="Parking spot does not exist.")
             
             if requested_spot.status != "available":
-                raise HTTPException(status_code=400, detail=f"Parking spot {vehicle_registration.parking_spot_id} is not available.")
+                # If the requested spot is not available, add the vehicle to the Redis queue
+                redis_client.rpush("vehicle_queue", vehicle_registration.vehicle_number)
+                raise HTTPException(status_code=400, detail="There is no parking available. Your vehicle has been added to the queue.")
             
             update_spot_status = text("UPDATE parkingspot SET status ='occupied' WHERE id = :spot_id")
             db.execute(update_spot_status,{"spot_id":requested_spot.id})
@@ -173,9 +174,9 @@ class VehicleRegistrationController:
             if parking_spot.status != "occupied":
                 raise HTTPException(status_code=404, detail="Parking spot is not occupied or the status is incorrect.")
 
-            formatted_entry_time, formatted_exit_time, parking_fee =  calculate_parking_fee_and_time(vehicle.entry_time)    
-
             exit_time_aware = datetime.now(timezone.utc)
+            formatted_entry_time, formatted_exit_time, parking_fee =  calculate_parking_fee_and_time(vehicle.entry_time,exit_time_aware)    
+
             update_vehicle_exit_time = text("UPDATE vehicleregistration SET exit_time = :exit_time WHERE id = :vehicle_id")
             db.execute(update_vehicle_exit_time, {"exit_time": exit_time_aware, "vehicle_id": vehicle.id})
 
@@ -184,7 +185,15 @@ class VehicleRegistrationController:
 
             db.commit()
 
-            formatted_entry_time, formatted_exit_time, parking_fee =  calculate_parking_fee_and_time(vehicle.entry_time,exit_time_aware)    
+            # Check for vehicles in the queue
+            next_vehicle = redis_client.lpop("vehicle_queue")
+            if next_vehicle:
+                next_vehicle_registration = VehicleRegistration(
+                    vehicle_number=next_vehicle.decode('utf-8'),  # Decode from bytes
+                    parking_spot_id=parking_spot.id,
+                    entry_time=exit_time_aware
+                )
+                VehicleRegistrationController.create_vehicle_registration(next_vehicle_registration, db)
 
             vehicle_response = VehicleRegistrationResponse(
                 id=vehicle.id,
@@ -198,6 +207,7 @@ class VehicleRegistrationController:
                     status=parking_spot.status
                 )
             )
+
 
             return {
             "message": f"Vehicle registration in slot {parking_spot.slot} has been deleted.",

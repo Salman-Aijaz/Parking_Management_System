@@ -3,6 +3,7 @@ from sqlmodel import create_engine, SQLModel, Session
 from sqlalchemy import inspect
 from dotenv import load_dotenv
 import logging
+from redis import Redis
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -10,7 +11,10 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+REDIS_URL = os.getenv("REDIS_URL")
+
 engine = create_engine(DATABASE_URL, echo=True)
+redis_client = Redis.from_url(REDIS_URL)
 
 def init_db():
     try:
