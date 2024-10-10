@@ -1,6 +1,6 @@
 import math
 from datetime import datetime, timezone
-from config import Config
+from app.config import Config
 
 PST = Config.get_timezone()
 
