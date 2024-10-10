@@ -1,8 +1,8 @@
 import math
-from zoneinfo import ZoneInfo
 from datetime import datetime, timezone
+from config import Config
 
-PST = ZoneInfo('Asia/Karachi')
+PST = Config.get_timezone()
 
 def calculate_parking_fee_and_time(entry_time, exit_time=None, rate_per_hour=50):
 
@@ -19,7 +19,7 @@ def calculate_parking_fee_and_time(entry_time, exit_time=None, rate_per_hour=50)
         exit_time_aware = exit_time_aware.astimezone(timezone.utc)
 
     duration = exit_time_aware - entry_time_aware
-    hours_parked = math.ceil(duration.total_seconds() / 3600)
+    hours_parked = math.ceil(duration.total_seconds() /  Config.SECONDS_PER_HOUR)
     parking_fee =  int(hours_parked * rate_per_hour) 
 
     entry_time_pst = entry_time_aware.astimezone(tz=PST)
