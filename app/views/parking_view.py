@@ -1,10 +1,10 @@
 from fastapi import APIRouter,Depends
 from app.controllers.parking_controller import ParkingController,VehicleRegistrationController
-from app.models.parking_spot import ParkingSpot,VehicleRegistration,VehicleRegistrationResponse,GenericResponse,VehicleExitRequest
-from typing import List,Dict,Any
+from typing import List
 from sqlmodel import Session
 from app.database import get_db
-
+from app.models.parking_models import ParkingSpot,VehicleRegistration
+from app.schemas.parking_schemas import VehicleRegistrationResponse,GenericResponse,VehicleExitRequest
 
 
 router = APIRouter()
