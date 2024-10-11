@@ -1,8 +1,14 @@
 from app.config import Config
+from fastapi.testclient import TestClient
+from app.main import app 
+
+client = TestClient(app)
+
 
 def test_read_vehicle_registrations():
+
     # FETCH THE LIST OF VEHICLE REGISTRATIONS
-    response = Config.client.get("/vehicle-registration")
+    response = client.get("/vehicle-registration")
     assert response.status_code == 200
 
     # CHECK THAT THE RESPONSE IS A LIST AND CONTAINS THE EXPECTED FIELDS
@@ -24,8 +30,9 @@ def test_read_vehicle_registrations():
 
 
 def test_read_parking_spots():
+
     # FETCH THE LIST OF PARKING SPOTS
-    response = Config.client.get("/parking/")
+    response = client.get("/parking/")
     assert response.status_code == 200
     
     # CHECK THAT THE RESPONSE IS A LIST AND CONTAINS THE EXPECTED FIELDS
