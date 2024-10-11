@@ -11,14 +11,12 @@ class ParkingController:
     @staticmethod
     def create_parking_spot(parking_spot: ParkingSpot,db:Session):
         try:
-            if parking_spot.slot > 20:
-                raise HTTPException(status_code=400, detail="Slot number cannot exceed 20.")
-            
-            if parking_spot.slot <1:
-                raise HTTPException(status_code=400,detail="Slot value will not be in negative")
+            if parking_spot.slot > 20 or parking_spot.slot < 1:
+                raise HTTPException(status_code=400, detail="Slot number must be between 1 and 20.")
 
             query = text("SELECT id FROM parkingspot WHERE slot = :slot")
             existing_spot = db.execute(query, {'slot': parking_spot.slot}).fetchone()
+
             if existing_spot:
                 raise HTTPException(status_code=400,detail="Slot is already filled.")
             
@@ -33,7 +31,7 @@ class ParkingController:
             raise http_exc
         
         except Exception as e:
-            raise HTTPException(status_code=500,detail=f"An error occured in creating parking spot:{e}")
+            raise HTTPException(status_code=500,detail=f"Internal server error while creating parking spot:{e}")
 
     @staticmethod
     def read_parking_spots(db:Session):
@@ -63,7 +61,7 @@ class VehicleRegistrationController:
             if requested_spot.status != "available":
                 # If the requested spot is not available, add the vehicle to the Redis queue
                 redis_client.rpush("vehicle_queue", vehicle_registration.vehicle_number)
-                raise HTTPException(status_code=400, detail="There is no parking available. Your vehicle has been added to the queue.")
+                raise HTTPException(status_code=400, detail="Parking full. Your vehicle has been added to the queue.")
             
             update_spot_status = text("UPDATE parkingspot SET status ='occupied' WHERE id = :spot_id")
             db.execute(update_spot_status,{"spot_id":requested_spot.id})
@@ -87,7 +85,7 @@ class VehicleRegistrationController:
             raise http_exc
         
         except Exception as e:
-            raise HTTPException(status_code=500,detail=f"An error occured {e}")
+            raise HTTPException(status_code=500,detail=f"Internal server error while registering vehicle: {e}")
 
     @staticmethod
     def read_vehicle_registrations(db:Session):
@@ -125,7 +123,7 @@ class VehicleRegistrationController:
 
             return vehicle_registrations
         except Exception as e:
-            raise HTTPException(status_code=500,detail=f"An error occured {e}")
+            raise HTTPException(status_code=500,detail=f"An error occured  in read_vehicle_registrations{e}")
 
          
     @staticmethod
@@ -135,16 +133,16 @@ class VehicleRegistrationController:
             vehicle = db.execute(query_vehicle, {"vehicle_number": vehicle_number}).fetchone()
 
             if not vehicle:
-                raise HTTPException(status_code=404, detail="Vehicle registration not found.")
+                raise HTTPException(status_code=404, detail=f"Vehicle with number '{vehicle_number}' was not found in the system. Please check the vehicle number and try again.")
             
             query_parking_spot = text("SELECT * FROM parkingspot WHERE id = :parking_spot_id")
             parking_spot = db.execute(query_parking_spot, {"parking_spot_id": vehicle.parking_spot_id}).fetchone()
       
             if not parking_spot:
-                raise HTTPException(status_code=404, detail="Parking spot does not exist.")    
+                raise HTTPException(status_code=404, detail=f"Parking spot with ID '{vehicle.parking_spot_id}' does not exist. Please contact support if this issue persists.")    
             
             if parking_spot.status != "occupied":
-                raise HTTPException(status_code=404, detail="Parking spot is not occupied or the status is incorrect.")
+                raise HTTPException(status_code=404, detail=f"Parking spot {parking_spot.slot} is currently not occupied.")
 
             exit_time_aware = datetime.now(timezone.utc)
             formatted_entry_time, formatted_exit_time, parking_fee =  calculate_parking_fee_and_time(vehicle.entry_time,exit_time_aware)    
@@ -182,7 +180,7 @@ class VehicleRegistrationController:
 
 
             return GenericResponse(
-            message= f"Vehicle registration in slot {parking_spot.slot} has been deleted.",
+            message= f"Vehicle with number '{vehicle.vehicle_number}' has successfully exited from slot {parking_spot.slot}. The parking fee is {parking_fee} Rs.",
             data= vehicle_response
             )
         
